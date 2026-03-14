@@ -10,7 +10,6 @@ dependencies = [
     "faster-whisper>=1.1",
     "pydantic-settings>=2.7",
     "python-multipart>=0.0.17",
-    "vidaa-control>=0.10",
     "tenacity>=9.0",
 ]
 
