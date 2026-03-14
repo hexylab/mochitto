@@ -206,10 +206,6 @@ VOICEVOX_URL=http://localhost:50021
 # 選択肢: tiny / base / small / medium / large-v2 / large-v3
 WHISPER_MODEL=large-v3
 
-# Hisense TV の設定（SwitchBot Hub Mini IR 経由での TV 操作に使用）
-TV_HOST=192.168.1.xxx
-TV_MAC=xx:xx:xx:xx:xx:xx
-
 # FastAPI サーバーのバインド設定
 HOST=0.0.0.0
 PORT=8000

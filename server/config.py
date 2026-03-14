@@ -14,10 +14,6 @@ class ServerConfig(BaseSettings):
     # Whisper
     whisper_model: str = "large-v3"
 
-    # Hisense TV
-    tv_host: str
-    tv_mac: str
-
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
