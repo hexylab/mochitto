@@ -37,9 +37,25 @@ def mock_services():
 
 @pytest.fixture
 def test_client(mock_services):
+    from unittest.mock import MagicMock
     from server.main import create_app_with_services
+
+    oauth = MagicMock()
+    oauth.is_authenticated = True
+
+    switchbot = mock_services["switchbot"]
+    switchbot.get_devices = AsyncMock(return_value=[])
+
+    llm = mock_services["llm"]
+    llm.update_devices = MagicMock()
+
     app = create_app_with_services(**mock_services)
-    return TestClient(app)
+    app.state.oauth = oauth
+    app.state.switchbot = switchbot
+    app.state.llm = llm
+
+    with TestClient(app) as client:
+        return client
 
 
 def test_voice_endpoint_device_control(test_client, sample_audio_bytes):
