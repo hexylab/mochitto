@@ -1,7 +1,6 @@
 import json
 from unittest.mock import AsyncMock, patch
 
-import pytest
 
 from server.services.llm import LLMService, IntentResult
 

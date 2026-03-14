@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from server.services.stt import STTService, STTResult
 
@@ -34,7 +33,7 @@ def test_stt_result_low_logprob_only():
 
 @patch("server.services.stt.WhisperModel")
 def test_stt_service_init(mock_whisper_cls: MagicMock):
-    service = STTService(model_name="tiny")
+    STTService(model_name="tiny")
     mock_whisper_cls.assert_called_once_with("tiny", device="auto", compute_type="auto")
 
 
