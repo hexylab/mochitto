@@ -1,0 +1,38 @@
+[project]
+name = "mochitto"
+version = "0.1.0"
+description = "ずんだもんホームアシスタント"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "faster-whisper>=1.1",
+    "pydantic-settings>=2.7",
+    "python-multipart>=0.0.17",
+    "vidaa-control>=0.10",
+    "tenacity>=9.0",
+]
+
+[project.optional-dependencies]
+client = [
+    "pvporcupine>=3.0",
+    "pyaudio>=0.2",
+    "python-mpv>=1.0",
+    "yt-dlp>=2025.1",
+    "ytmusicapi>=1.9",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-httpx>=0.35",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
