@@ -187,31 +187,31 @@ uv run mochitto-client
 
 ## 設定
 
-サーバーおよびクライアントの設定は `.env` ファイル（またはシェル環境変数）で管理します。
+サーバーとクライアントはそれぞれ別の `.env` ファイルで管理します。どちらも `extra = "ignore"` で不要な項目は無視されるため、1つの `.env` にまとめることも可能です。
+
+### サーバー側（開発マシン / Docker）
 
 ```dotenv
-# ===== サーバー側 =====
-
-# SwitchBot API 認証情報（SwitchBot アプリ → プロフィール → 開発者向けオプション で取得）
+# SwitchBot API 認証情報（SwitchBot アプリ → 開発者向けオプション で取得）
 SWITCHBOT_TOKEN=your_switchbot_token
 SWITCHBOT_SECRET=your_switchbot_secret
 
-# VoiceVox Engine の URL
-# Docker Compose 利用時: http://voicevox:50021（デフォルト）
-# ローカル開発時: http://localhost:50021
+# VoiceVox Engine の URL（Docker Compose 内部ネットワーク）
 VOICEVOX_URL=http://voicevox:50021
 
 # Faster-Whisper のモデルサイズ（デフォルト: large-v3）
 # 選択肢: tiny / base / small / medium / large-v2 / large-v3
 WHISPER_MODEL=large-v3
+```
 
-# ===== クライアント側（Raspberry Pi）=====
+### クライアント側（Raspberry Pi）
 
-# サーバーの URL
+```dotenv
+# サーバーの URL（サーバーの LAN IP を指定）
 SERVER_URL=http://192.168.1.100:8000
 
-# Picovoice のアクセスキー（Picovoice Console で取得）
-PORCUPINE_ACCESS_KEY=your_picovoice_access_key
+# Picovoice のアクセスキー（https://console.picovoice.ai/ で取得）
+PORCUPINE_ACCESS_KEY=your_porcupine_access_key
 ```
 
 ---
