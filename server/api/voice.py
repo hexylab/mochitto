@@ -28,6 +28,7 @@ DEVICE_CATEGORY_NAMES = {
     "aircon": "エアコン",
     "curtain": "カーテン",
     "tv": "テレビ",
+    "meter": "温湿度計",
 }
 
 
@@ -107,6 +108,10 @@ def create_voice_router(
 async def _handle_device(intent: IntentResult, switchbot: SwitchBotClient) -> dict:
     try:
         device_id = intent.device_id or ""
+
+        # 温湿度計: ステータス読み取り
+        if intent.device_category == "meter":
+            return await _handle_meter(intent, switchbot, device_id)
 
         if switchbot.is_diy_device(device_id):
             await _handle_diy_device(intent, switchbot, device_id)
@@ -244,6 +249,30 @@ async def _handle_physical_device(
             await switchbot.send_command(device_id, action)
     else:
         await switchbot.send_command(device_id, action)
+
+
+async def _handle_meter(
+    intent: IntentResult, switchbot: SwitchBotClient, device_id: str
+) -> dict:
+    """温湿度計のステータスを読み取り、responseに結果を設定"""
+    status = await switchbot.get_device_status(device_id)
+    temperature = status.get("temperature")
+    humidity = status.get("humidity")
+
+    device_name = intent.params.get("device_name", "")
+    parts = []
+    if temperature is not None:
+        parts.append(f"気温は{temperature}度")
+    if humidity is not None:
+        parts.append(f"湿度は{humidity}パーセント")
+
+    if parts:
+        location = f"{device_name}の" if device_name else ""
+        intent.response = f"{location}{'、'.join(parts)}なのだ"
+    else:
+        intent.response = "センサーの値が取得できなかったのだ"
+
+    return {"success": True, "device": "meter", "temperature": temperature, "humidity": humidity}
 
 
 async def _build_response(

@@ -64,6 +64,16 @@ class SwitchBotClient:
         meta = self._device_meta.get(device_id, {})
         return "remoteType" in meta
 
+    async def get_device_status(self, device_id: str) -> dict:
+        """デバイスのステータスを取得（温湿度計等）"""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{SWITCHBOT_API_BASE}/devices/{device_id}/status",
+                headers=self._build_headers(),
+            )
+            resp.raise_for_status()
+            return resp.json().get("body", {})
+
     async def send_command(
         self, device_id: str, command: str, parameter: str = "default"
     ) -> dict:

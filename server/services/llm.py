@@ -29,6 +29,7 @@ action一覧:
 - aircon: on, off, set (params: temperature, mode=cool/heat/auto)
 - curtain: open, close
 - tv: power_on, power_off, volume_up, volume_down, channel_up, channel_down, mute
+- meter: status（温度・湿度の読み取り。params: device_name=場所名）
 - DIYデバイス(typeが"DIY"で始まる): on/off のみ。他はparamsに button_name 指定
 
 他のintent例:
