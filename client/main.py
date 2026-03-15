@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger(__name__)
 
 ERROR_AUDIO_DIR = Path(__file__).parent.parent / "assets" / "error_audio"
+FEEDBACK_AUDIO_DIR = Path(__file__).parent.parent / "assets" / "feedback_audio"
 
 
 class MochittoClient:
@@ -75,7 +76,9 @@ class MochittoClient:
         if self._music.is_playing:
             self._music.duck()
 
+        self._play_feedback("listen.wav")
         audio_bytes = self._recorder.record(stream)
+        self._play_feedback("think.wav")
 
         try:
             json_data, audio_data = await self._server.send_voice(audio_bytes)
@@ -120,6 +123,13 @@ class MochittoClient:
             )
         except Exception:
             logger.debug("エラーレポート送信失敗（サーバー接続不可）")
+
+    def _play_feedback(self, filename: str) -> None:
+        path = FEEDBACK_AUDIO_DIR / filename
+        if path.exists():
+            self._player.play(path.read_bytes())
+        else:
+            logger.warning("フィードバック音声が見つかりません: %s", path)
 
     def _play_error_audio(self, filename: str) -> None:
         path = ERROR_AUDIO_DIR / filename
