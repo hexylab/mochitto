@@ -22,7 +22,5 @@ def test_config_defaults(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SWITCHBOT_SECRET", "s")
 
     config = ServerConfig(_env_file=None)
-    assert config.voicevox_url == "http://localhost:50021"
+    assert config.voicevox_url == "http://voicevox:50021"
     assert config.whisper_model == "large-v3"
-    assert config.host == "0.0.0.0"
-    assert config.port == 8000

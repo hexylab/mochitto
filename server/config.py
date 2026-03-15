@@ -9,11 +9,7 @@ class ServerConfig(BaseSettings):
     switchbot_secret: str
 
     # VoiceVox
-    voicevox_url: str = "http://localhost:50021"
+    voicevox_url: str = "http://voicevox:50021"
 
     # Whisper
     whisper_model: str = "large-v3"
-
-    # Server
-    host: str = "0.0.0.0"
-    port: int = 8000
