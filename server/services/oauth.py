@@ -20,6 +20,11 @@ SCOPE = "openid profile email offline_access"
 REFRESH_MARGIN_SECONDS = 300
 
 
+class OAuthError(RuntimeError):
+    """OAuth認証関連のエラー"""
+    pass
+
+
 class OAuthManager:
     def __init__(self, auth_path: Path = Path("auth.json")):
         self._auth_path = auth_path
@@ -65,17 +70,20 @@ class OAuthManager:
         return time.time() >= (self._expires_at - REFRESH_MARGIN_SECONDS)
 
     async def _refresh_token(self) -> dict:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                TOKEN_ENDPOINT,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self._refresh_token_value,
-                    "client_id": CLIENT_ID,
-                },
-            )
-            resp.raise_for_status()
-            return resp.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    TOKEN_ENDPOINT,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": self._refresh_token_value,
+                        "client_id": CLIENT_ID,
+                    },
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPError as e:
+            raise OAuthError(f"トークンリフレッシュに失敗: {e}") from e
 
     async def get_token(self) -> str:
         async with self._lock:
@@ -83,7 +91,7 @@ class OAuthManager:
                 return self._access_token
 
             if not self._refresh_token_value:
-                raise RuntimeError(
+                raise OAuthError(
                     "認証されていません。サーバーを再起動して認証を行ってください。"
                 )
 

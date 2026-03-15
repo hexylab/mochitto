@@ -1,8 +1,44 @@
 import json
-from unittest.mock import AsyncMock, patch
-
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from server.services.llm import LLMService, IntentResult
+
+
+def _make_sse_response(response_data: dict):
+    """SSEストリーミングレスポンスのモックを作成するヘルパー"""
+    completed_event = {
+        "type": "response.completed",
+        "response": response_data,
+    }
+    lines = [
+        f"data: {json.dumps(completed_event)}",
+        "data: [DONE]",
+    ]
+
+    async def aiter_lines():
+        for line in lines:
+            yield line
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.aiter_lines = aiter_lines
+
+    mock_stream_ctx = MagicMock()
+    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+    return mock_stream_ctx
+
+
+def _patch_llm_client(mock_stream_ctx):
+    """httpx.AsyncClient をモックし stream() が mock_stream_ctx を返すようにする"""
+    mock_client = AsyncMock()
+    mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    patcher = patch("server.services.llm.httpx.AsyncClient", return_value=mock_client)
+    return patcher
 
 
 def test_parse_device_control_intent():
@@ -82,36 +118,26 @@ async def test_llm_classify_intent():
 
     service = LLMService(oauth_manager=mock_oauth, devices_info=[])
 
-    mock_response_json = {
+    response_data = {
         "output": [
             {
                 "type": "message",
                 "content": [
                     {
                         "type": "output_text",
-                        "text": json.dumps(
-                            {
-                                "intent": "chat",
-                                "response": "こんにちはなのだ！",
-                            }
-                        ),
+                        "text": json.dumps({
+                            "intent": "chat",
+                            "response": "こんにちはなのだ！",
+                        }),
                     }
                 ],
             }
         ]
     }
 
-    with patch("server.services.llm.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_resp = AsyncMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_response_json
-        mock_resp.raise_for_status = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
+    mock_stream_ctx = _make_sse_response(response_data)
 
+    with _patch_llm_client(mock_stream_ctx):
         result = await service.classify_intent("こんにちは")
         assert result.intent == "chat"
         assert result.response == "こんにちはなのだ！"
@@ -124,7 +150,7 @@ async def test_llm_classify_intent_parse_failure():
 
     service = LLMService(oauth_manager=mock_oauth, devices_info=[])
 
-    mock_response_json = {
+    response_data = {
         "output": [
             {
                 "type": "message",
@@ -138,16 +164,9 @@ async def test_llm_classify_intent_parse_failure():
         ]
     }
 
-    with patch("server.services.llm.httpx.AsyncClient") as mock_client_cls:
-        mock_client = AsyncMock()
-        mock_resp = AsyncMock()
-        mock_resp.json.return_value = mock_response_json
-        mock_resp.raise_for_status = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client_cls.return_value = mock_client
+    mock_stream_ctx = _make_sse_response(response_data)
 
+    with _patch_llm_client(mock_stream_ctx):
         result = await service.classify_intent("テスト")
         assert result.intent == "chat"
         assert result.response == "これはJSONではないのだ"

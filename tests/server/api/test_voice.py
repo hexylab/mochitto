@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.services.llm import IntentResult
+from server.services.oauth import OAuthError
 
 
 @pytest.fixture
@@ -76,3 +77,25 @@ def test_voice_endpoint_low_confidence_stt(test_client, mock_services, sample_au
         files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
     )
     assert response.status_code == 200
+
+
+def test_voice_endpoint_oauth_error(test_client, mock_services, sample_audio_bytes):
+    """OAuth認証エラー時は固有のエラーメッセージを返す"""
+    mock_services["llm"].classify_intent.side_effect = OAuthError("トークン期限切れ")
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    assert "認証が切れてしまったのだ" in response.text
+
+
+def test_voice_endpoint_device_failure(test_client, mock_services, sample_audio_bytes):
+    """デバイス操作失敗時はテンプレートエラーメッセージを返す"""
+    mock_services["switchbot"].send_command.side_effect = RuntimeError("接続エラー")
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    assert "照明の操作に失敗したのだ" in response.text

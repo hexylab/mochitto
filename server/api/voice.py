@@ -8,11 +8,19 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from server.services.stt import STTService
 from server.services.tts import TTSService
 from server.services.llm import LLMService, IntentResult
+from server.services.oauth import OAuthError
 from server.devices.switchbot import SwitchBotClient
 
 logger = logging.getLogger(__name__)
 
 LOW_CONFIDENCE_RESPONSE = "うまく聞き取れなかったのだ、もう一度言ってほしいのだ"
+
+DEVICE_CATEGORY_NAMES = {
+    "light": "照明",
+    "aircon": "エアコン",
+    "curtain": "カーテン",
+    "tv": "テレビ",
+}
 
 
 def create_voice_router(
@@ -41,6 +49,15 @@ def create_voice_router(
         # 2. LLM intent classification
         try:
             intent_result = await llm.classify_intent(stt_result.text)
+        except OAuthError:
+            logger.exception("OAuth認証エラー")
+            return await _build_response(
+                IntentResult(
+                    intent="chat",
+                    response="認証が切れてしまったのだ。サーバーを確認してほしいのだ",
+                ),
+                tts,
+            )
         except Exception:
             logger.exception("LLM呼び出し失敗")
             return await _build_response(
@@ -56,6 +73,11 @@ def create_voice_router(
 
         if intent_result.intent == "device_control":
             device_result = await _handle_device(intent_result, switchbot)
+            if device_result and not device_result.get("success"):
+                device_name = DEVICE_CATEGORY_NAMES.get(
+                    intent_result.device_category or "", intent_result.device_category or "デバイス"
+                )
+                intent_result.response = f"{device_name}の操作に失敗したのだ"
 
         elif intent_result.intent == "web_search" and intent_result.query:
             search_response = await llm.web_search(intent_result.query)
