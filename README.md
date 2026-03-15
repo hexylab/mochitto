@@ -191,11 +191,33 @@ uv sync --extra client
 `.env` に `SERVER_URL` と `PORCUPINE_ACCESS_KEY` を設定します。
 
 ```bash
-# クライアントの起動
+# クライアントの起動（フォアグラウンド）
 uv run mochitto-client
 ```
 
 「Mochitto起動完了。『モチット』と呼びかけてください。」と表示されたら準備完了です。
+
+#### デーモン化（systemd で常駐）
+
+Raspberry Pi の起動時に自動で Mochitto クライアントを起動するには、systemd サービスとして登録します。
+
+```bash
+# サービスファイルをインストール（pi はユーザー名に合わせて変更）
+sudo cp scripts/mochitto-client@.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# 有効化 & 起動（@ の後にユーザー名を指定）
+sudo systemctl enable --now mochitto-client@pi
+```
+
+```bash
+# ログ確認
+journalctl -u mochitto-client@pi -f
+
+# 停止 / 再起動
+sudo systemctl stop mochitto-client@pi
+sudo systemctl restart mochitto-client@pi
+```
 
 ---
 
