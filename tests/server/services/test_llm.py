@@ -144,7 +144,7 @@ async def test_llm_classify_intent():
 
 
 async def test_llm_classify_intent_parse_failure():
-    """LLM出力がJSONでない場合、chatとして扱う"""
+    """LLM出力がJSONでない場合、固定メッセージで応答"""
     mock_oauth = AsyncMock()
     mock_oauth.get_token.return_value = "test_token"
 
@@ -169,4 +169,61 @@ async def test_llm_classify_intent_parse_failure():
     with _patch_llm_client(mock_stream_ctx):
         result = await service.classify_intent("テスト")
         assert result.intent == "chat"
-        assert result.response == "これはJSONではないのだ"
+        assert "もう一度" in result.response
+
+
+async def test_llm_classify_intent_code_block():
+    """LLM出力がコードブロック付きでもJSONを抽出できる"""
+    mock_oauth = AsyncMock()
+    mock_oauth.get_token.return_value = "test_token"
+
+    service = LLMService(oauth_manager=mock_oauth, devices_info=[])
+
+    response_data = {
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": '```json\n{"intent":"chat","response":"こんにちはなのだ"}\n```',
+                    }
+                ],
+            }
+        ]
+    }
+
+    mock_stream_ctx = _make_sse_response(response_data)
+
+    with _patch_llm_client(mock_stream_ctx):
+        result = await service.classify_intent("こんにちは")
+        assert result.intent == "chat"
+        assert result.response == "こんにちはなのだ"
+
+
+def test_extract_json_plain():
+    mock_oauth = AsyncMock()
+    service = LLMService(oauth_manager=mock_oauth, devices_info=[])
+    result = service._extract_json('{"intent":"chat","response":"テスト"}')
+    assert result["intent"] == "chat"
+
+
+def test_extract_json_with_code_block():
+    mock_oauth = AsyncMock()
+    service = LLMService(oauth_manager=mock_oauth, devices_info=[])
+    result = service._extract_json('```json\n{"intent":"chat","response":"テスト"}\n```')
+    assert result["intent"] == "chat"
+
+
+def test_extract_json_with_surrounding_text():
+    mock_oauth = AsyncMock()
+    service = LLMService(oauth_manager=mock_oauth, devices_info=[])
+    result = service._extract_json('以下がJSONです:\n{"intent":"chat","response":"テスト"}\n以上')
+    assert result["intent"] == "chat"
+
+
+def test_extract_json_no_json():
+    mock_oauth = AsyncMock()
+    service = LLMService(oauth_manager=mock_oauth, devices_info=[])
+    result = service._extract_json("JSONではないテキスト")
+    assert result is None

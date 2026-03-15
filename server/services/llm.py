@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 import httpx
@@ -13,55 +14,28 @@ RESPONSES_API_URL = "https://chatgpt.com/backend-api/codex/responses"
 MODEL = "gpt-5.4"
 
 SYSTEM_PROMPT_TEMPLATE = """\
-あなたはスマートホームアシスタント「モチット」です。ずんだもんの口調（語尾に「のだ」「なのだ」）で応答してください。
+ずんだもんの口調（語尾「のだ」「なのだ」）で応答するスマートホームアシスタント。
+JSONのみ出力。説明文やコードブロックは不要。responseは1文で簡潔に。
 
-ユーザーの発話を以下のintentに分類し、JSON形式（json）で出力してください。
+intent: device_control / play_music / music_control / web_search / chat
 
-## Intent一覧
-- device_control: デバイス操作（照明、エアコン、カーテン、テレビ）
-- play_music: 音楽再生
-- music_control: 再生中の音楽制御（停止、一時停止、再開、音量調整）
-- web_search: Web検索
-- chat: 雑談・質問
+デバイス: {devices_json}
 
-## 操作可能なデバイス
-{devices_json}
+device_control例:
+{{"intent":"device_control","device_id":"ID","device_category":"light","action":"on","params":{{}},"response":"電気をつけたのだ"}}
 
-## device_control の出力形式
-```json
-{{
-  "intent": "device_control",
-  "device_id": "<デバイスID>",
-  "device_category": "light|aircon|curtain|tv",
-  "action": "<アクション名>",
-  "params": {{}},
-  "response": "ずんだもんの応答"
-}}
-```
+action一覧:
+- light: on, off, brightness_up, brightness_down
+- aircon: on, off, set (params: temperature, mode=cool/heat/auto)
+- curtain: open, close
+- tv: power_on, power_off, volume_up, volume_down, channel_up, channel_down, mute
+- DIYデバイス(typeが"DIY"で始まる): on/off のみ。他はparamsに button_name 指定
 
-### カテゴリ別アクション
-
-#### light
-- typeが"Light"の場合（通常IR）: on, off, brightness_up, brightness_down
-- typeが"DIY Light"の場合: on, off のみ標準対応。それ以外はparams内にbutton_nameを指定
-- 物理デバイス（Color Bulb等）: on, off, brightness (params: {{"brightness": 0-100}})
-
-#### aircon
-- on, off, set (params: {{"temperature": 20-30, "mode": "cool|heat|auto"}})
-
-#### curtain
-- open, close
-
-#### tv
-- typeが"TV"の場合（通常IR）: power_on, power_off, volume_up, volume_down, channel_up, channel_down, mute, set_channel (params: {{"channel": チャンネル番号}})
-- typeが"DIY TV"の場合: power_on, power_off のみ標準対応。それ以外の操作にはparams内にbutton_nameを指定（例: params: {{"button_name": "ボタン名"}}）
-
-### DIYデバイスについて
-typeが"DIY"で始まるデバイスは手動学習リモコンです。電源と一部の基本操作以外は、アプリに登録されたボタン名（button_name）を指定する必要があります。ボタン名が不明な場合は、responseで「そのボタンは登録されていないのだ」と回答してください。
-
-## その他のintentの出力形式
-responseフィールドにはずんだもん口調の応答を含めてください。
-device_controlの場合、device_idフィールドに操作対象のデバイスIDを必ず含めてください。
+他のintent例:
+{{"intent":"play_music","query":"米津玄師 Lemon","response":"再生するのだ"}}
+{{"intent":"music_control","action":"stop","response":"止めたのだ"}}
+{{"intent":"web_search","query":"明日の天気"}}
+{{"intent":"chat","response":"おはようなのだ"}}
 """
 
 WEB_SEARCH_SYSTEM_PROMPT = """\
@@ -194,6 +168,23 @@ class LLMService:
                         return content["text"]
         return ""
 
+    def _extract_json(self, text: str) -> dict | None:
+        """LLM出力からJSONを抽出。コードブロックや前後のテキストに対応。"""
+        # ```json ... ``` のコードブロックを除去
+        code_block = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if code_block:
+            text = code_block.group(1)
+
+        # テキスト中の最初の {...} を抽出
+        brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+        if brace_match:
+            try:
+                return json.loads(brace_match.group())
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
     async def classify_intent(self, text: str) -> IntentResult:
         response_data = await self._call_responses_api(
             user_input=text,
@@ -201,13 +192,20 @@ class LLMService:
             use_structured=True,
         )
         raw_text = self._extract_text(response_data)
+        logger.debug("LLM生出力: %s", raw_text)
 
-        try:
-            parsed = json.loads(raw_text)
-            return IntentResult.from_dict(parsed)
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning("LLM出力のパースに失敗: %s", e)
-            return IntentResult(intent="chat", response=raw_text)
+        parsed = self._extract_json(raw_text)
+        if parsed:
+            try:
+                return IntentResult.from_dict(parsed)
+            except KeyError as e:
+                logger.warning("LLM出力のフィールド不足: %s", e)
+
+        logger.warning("LLM出力のパースに失敗: %s", raw_text[:200])
+        return IntentResult(
+            intent="chat",
+            response="うまく理解できなかったのだ、もう一度言ってほしいのだ",
+        )
 
     async def web_search(self, query: str) -> str:
         response_data = await self._call_responses_api(
