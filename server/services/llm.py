@@ -122,14 +122,12 @@ class LLMService:
                 {"role": "user", "content": user_input},
             ],
             "reasoning": {"effort": "low"},
-            "max_output_tokens": 256,
         }
 
         if tools:
             body["tools"] = tools
             # Web検索は推論が必要なため effort を上げる
             body["reasoning"] = {"effort": "medium"}
-            body["max_output_tokens"] = 512
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream(
