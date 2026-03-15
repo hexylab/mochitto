@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import platform
+import traceback
 from pathlib import Path
 
 import pyaudio
@@ -54,7 +56,12 @@ class MochittoClient:
                 pcm = stream.read(self._wake_word.frame_length, exception_on_overflow=False)
 
                 if self._wake_word.process(pcm):
-                    await self._handle_command(stream)
+                    try:
+                        await self._handle_command(stream)
+                    except Exception:
+                        tb = traceback.format_exc()
+                        logger.exception("コマンド処理中にエラーが発生しましたが、継続します")
+                        await self._report_error(tb)
 
         except KeyboardInterrupt:
             logger.info("終了します...")
@@ -103,6 +110,16 @@ class MochittoClient:
 
         if self._music.is_playing:
             self._music.unduck()
+
+    async def _report_error(self, tb: str) -> None:
+        """エラーログをサーバーに送信。送信失敗時は無視して継続。"""
+        try:
+            await self._server.report_error(
+                error=tb,
+                hostname=platform.node(),
+            )
+        except Exception:
+            logger.debug("エラーレポート送信失敗（サーバー接続不可）")
 
     def _play_error_audio(self, filename: str) -> None:
         path = ERROR_AUDIO_DIR / filename

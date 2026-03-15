@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
 
 from server.services.stt import STTService
 from server.services.tts import TTSService
@@ -12,6 +13,13 @@ from server.services.oauth import OAuthError
 from server.devices.switchbot import SwitchBotClient
 
 logger = logging.getLogger(__name__)
+client_error_logger = logging.getLogger("mochitto.client_error")
+
+
+class ErrorReport(BaseModel):
+    error: str
+    hostname: str = ""
+
 
 LOW_CONFIDENCE_RESPONSE = "うまく聞き取れなかったのだ、もう一度言ってほしいのだ"
 
@@ -30,6 +38,13 @@ def create_voice_router(
     switchbot: SwitchBotClient,
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/api/v1/error-report")
+    async def error_report(report: ErrorReport):
+        client_error_logger.error(
+            "クライアントエラー [%s]\n%s", report.hostname, report.error
+        )
+        return {"status": "received"}
 
     @router.post("/api/v1/voice")
     async def handle_voice(audio: UploadFile = File(...)):

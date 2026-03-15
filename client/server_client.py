@@ -30,6 +30,14 @@ class ServerClient:
     def __init__(self, server_url: str):
         self._server_url = server_url
 
+    async def report_error(self, error: str, hostname: str) -> None:
+        """エラーレポートをサーバーに送信"""
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{self._server_url}/api/v1/error-report",
+                json={"error": error, "hostname": hostname},
+            )
+
     async def send_voice(self, audio_bytes: bytes) -> tuple[dict, bytes]:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
