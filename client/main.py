@@ -78,10 +78,17 @@ class MochittoClient:
                 self._music.unduck()
             return
 
+        intent = json_data.get("intent")
+
+        # VoiceVox 503 エラー: ローカルのエラー音を再生
+        if intent == "error":
+            self._play_error_audio("voicevox_error.wav")
+            if self._music.is_playing:
+                self._music.unduck()
+            return
+
         if audio_data:
             self._player.play(audio_data)
-
-        intent = json_data.get("intent")
 
         if intent == "play_music":
             query = json_data.get("music_query")
