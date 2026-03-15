@@ -7,6 +7,7 @@ class ClientConfig(BaseSettings):
     server_url: str = "http://192.168.1.100:8000"
     porcupine_access_key: str
     wake_word_path: str = "mochitto.ppn"
+    porcupine_model_path: str | None = None
 
     # Recording params
     silence_threshold: int = 500

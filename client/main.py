@@ -24,6 +24,7 @@ class MochittoClient:
         self._wake_word = WakeWordListener(
             access_key=config.porcupine_access_key,
             keyword_path=config.wake_word_path,
+            model_path=config.porcupine_model_path,
         )
         self._recorder = AudioRecorder(
             sample_rate=config.sample_rate,

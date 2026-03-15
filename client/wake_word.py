@@ -5,11 +5,18 @@ logger = logging.getLogger(__name__)
 
 
 class WakeWordListener:
-    def __init__(self, access_key: str, keyword_path: str, sample_rate: int = 16000):
+    def __init__(
+        self,
+        access_key: str,
+        keyword_path: str,
+        model_path: str | None = None,
+        sample_rate: int = 16000,
+    ):
         import pvporcupine
         self._porcupine = pvporcupine.create(
             access_key=access_key,
             keyword_paths=[keyword_path],
+            model_path=model_path,
         )
         self._sample_rate = sample_rate
         self._frame_length = self._porcupine.frame_length
