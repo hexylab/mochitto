@@ -19,7 +19,7 @@ server = [
 client = [
     "pvporcupine>=3.0",
     "pyaudio>=0.2",
-    "python-mpv>=0.5",
+    "python-mpv>=0.5,<1.0",
     "yt-dlp>=2025.1",
     "ytmusicapi>=1.9",
 ]
