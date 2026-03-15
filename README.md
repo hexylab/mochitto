@@ -199,24 +199,24 @@ uv run mochitto-client
 
 #### デーモン化（systemd で常駐）
 
-Raspberry Pi の起動時に自動で Mochitto クライアントを起動するには、systemd サービスとして登録します。
+Raspberry Pi の起動時に自動で Mochitto クライアントを起動するには、インストールスクリプトを実行します。
+プロジェクトのパスや uv のパスを自動検出して systemd サービスを登録します。
 
 ```bash
-# サービスファイルをインストール（pi はユーザー名に合わせて変更）
-sudo cp scripts/mochitto-client@.service /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# 有効化 & 起動（@ の後にユーザー名を指定）
-sudo systemctl enable --now mochitto-client@pi
+# プロジェクトディレクトリ内で実行
+sudo bash scripts/install-service.sh
 ```
 
 ```bash
 # ログ確認
-journalctl -u mochitto-client@pi -f
+journalctl -u mochitto-client -f
 
 # 停止 / 再起動
-sudo systemctl stop mochitto-client@pi
-sudo systemctl restart mochitto-client@pi
+sudo systemctl stop mochitto-client
+sudo systemctl restart mochitto-client
+
+# アンインストール
+sudo systemctl disable --now mochitto-client
 ```
 
 ---
