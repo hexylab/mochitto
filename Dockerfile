@@ -14,7 +14,7 @@ WORKDIR /app
 
 # 依存関係を先にインストール（キャッシュ効率化）
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --python 3.12 --no-dev --no-install-project
+RUN uv sync --python 3.12 --no-dev --extra server --no-install-project
 
 # アプリケーションコードをコピー
 COPY server/ server/

@@ -4,16 +4,18 @@ version = "0.1.0"
 description = "ずんだもんホームアシスタント"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.34",
     "httpx>=0.28",
-    "faster-whisper>=1.1",
     "pydantic-settings>=2.7",
-    "python-multipart>=0.0.17",
-    "tenacity>=9.0",
 ]
 
 [project.optional-dependencies]
+server = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "faster-whisper>=1.1",
+    "python-multipart>=0.0.17",
+    "tenacity>=9.0",
+]
 client = [
     "pvporcupine>=3.0",
     "pyaudio>=0.2",
