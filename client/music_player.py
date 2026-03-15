@@ -17,10 +17,15 @@ class MusicPlayer:
     def _ensure_player(self):
         if self._player is None:
             import mpv
-            self._player = mpv.MPV(ytdl=True, video=False)
+            self._player = mpv.MPV(video=False)
 
-    def _build_url(self, video_id: str) -> str:
-        return f"https://www.youtube.com/watch?v={video_id}"
+    def _extract_audio_url(self, video_url: str) -> str:
+        """yt-dlp でYouTube URLから音声ストリームURLを取得"""
+        import yt_dlp
+        opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            return info["url"]
 
     def search(self, query: str) -> dict[str, Any] | None:
         from ytmusicapi import YTMusic
@@ -33,6 +38,7 @@ class MusicPlayer:
     def play(self, query: str) -> str | None:
         result = self.search(query)
         if not result:
+            logger.warning("楽曲が見つかりません: %s", query)
             return None
 
         video_id = result.get("videoId")
@@ -40,12 +46,15 @@ class MusicPlayer:
             return None
 
         title = result.get("title", "不明")
-        url = self._build_url(video_id)
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        # yt-dlp で音声ストリームURLを取得し、mpv に直接渡す
+        stream_url = self._extract_audio_url(video_url)
 
         self._ensure_player()
-        self._player.play(url)
+        self._player.play(stream_url)
         self._is_playing = True
-        logger.info("再生開始: %s (%s)", title, url)
+        logger.info("再生開始: %s (%s)", title, video_url)
         return title
 
     def handle_action(self, action: str) -> None:
