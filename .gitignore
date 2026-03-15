@@ -3,6 +3,7 @@ __pycache__/
 .env
 auth.json
 *.ppn
+*.pv
 .venv/
 dist/
 *.egg-info/
