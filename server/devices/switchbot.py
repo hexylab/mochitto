@@ -16,6 +16,7 @@ class SwitchBotClient:
     def __init__(self, token: str, secret: str):
         self._token = token
         self._secret = secret
+        self._device_meta: dict[str, dict] = {}  # deviceId -> device metadata
 
     def _build_headers(self) -> dict[str, str]:
         t = str(int(time.time() * 1000))
@@ -45,7 +46,23 @@ class SwitchBotClient:
             )
             resp.raise_for_status()
             body = resp.json()["body"]
-            return body.get("deviceList", []) + body.get("infraredRemoteList", [])
+            devices = body.get("deviceList", []) + body.get("infraredRemoteList", [])
+            self._device_meta = {d["deviceId"]: d for d in devices}
+            return devices
+
+    def get_remote_type(self, device_id: str) -> str:
+        """デバイスのremoteType（IR機器）またはdeviceType（物理デバイス）を取得"""
+        meta = self._device_meta.get(device_id, {})
+        return meta.get("remoteType", meta.get("deviceType", ""))
+
+    def is_diy_device(self, device_id: str) -> bool:
+        """DIY（手動学習）IR機器かどうかを判定"""
+        return self.get_remote_type(device_id).startswith("DIY ")
+
+    def is_ir_device(self, device_id: str) -> bool:
+        """IR機器（赤外線リモコン）かどうかを判定"""
+        meta = self._device_meta.get(device_id, {})
+        return "remoteType" in meta
 
     async def send_command(
         self, device_id: str, command: str, parameter: str = "default"

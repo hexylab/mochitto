@@ -27,8 +27,40 @@ SYSTEM_PROMPT_TEMPLATE = """\
 ## 操作可能なデバイス
 {devices_json}
 
-## 出力形式
-各intentに応じたJSONを出力してください。responseフィールドにはずんだもん口調の応答を含めてください。
+## device_control の出力形式
+```json
+{{
+  "intent": "device_control",
+  "device_id": "<デバイスID>",
+  "device_category": "light|aircon|curtain|tv",
+  "action": "<アクション名>",
+  "params": {{}},
+  "response": "ずんだもんの応答"
+}}
+```
+
+### カテゴリ別アクション
+
+#### light
+- typeが"Light"の場合（通常IR）: on, off, brightness_up, brightness_down
+- typeが"DIY Light"の場合: on, off のみ標準対応。それ以外はparams内にbutton_nameを指定
+- 物理デバイス（Color Bulb等）: on, off, brightness (params: {{"brightness": 0-100}})
+
+#### aircon
+- on, off, set (params: {{"temperature": 20-30, "mode": "cool|heat|auto"}})
+
+#### curtain
+- open, close
+
+#### tv
+- typeが"TV"の場合（通常IR）: power_on, power_off, volume_up, volume_down, channel_up, channel_down, mute, set_channel (params: {{"channel": チャンネル番号}})
+- typeが"DIY TV"の場合: power_on, power_off のみ標準対応。それ以外の操作にはparams内にbutton_nameを指定（例: params: {{"button_name": "ボタン名"}}）
+
+### DIYデバイスについて
+typeが"DIY"で始まるデバイスは手動学習リモコンです。電源と一部の基本操作以外は、アプリに登録されたボタン名（button_name）を指定する必要があります。ボタン名が不明な場合は、responseで「そのボタンは登録されていないのだ」と回答してください。
+
+## その他のintentの出力形式
+responseフィールドにはずんだもん口調の応答を含めてください。
 device_controlの場合、device_idフィールドに操作対象のデバイスIDを必ず含めてください。
 """
 
@@ -70,10 +102,12 @@ class LLMService:
         self._devices_info = devices_info
 
     def update_devices(self, devices: list[dict]) -> None:
-        self._devices_info = [
-            {"id": d["deviceId"], "name": d["deviceName"], "type": d.get("deviceType", "")}
-            for d in devices
-        ]
+        self._devices_info = []
+        for d in devices:
+            info = {"id": d["deviceId"], "name": d["deviceName"]}
+            # IR機器は remoteType、物理デバイスは deviceType
+            info["type"] = d.get("remoteType", d.get("deviceType", ""))
+            self._devices_info.append(info)
 
     def _build_system_prompt(self) -> str:
         devices_json = json.dumps(self._devices_info, ensure_ascii=False, indent=2)

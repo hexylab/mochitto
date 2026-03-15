@@ -93,69 +93,142 @@ async def _handle_device(intent: IntentResult, switchbot: SwitchBotClient) -> di
     try:
         device_id = intent.device_id or ""
 
-        if intent.device_category == "tv":
-            # TV is controlled via SwitchBot Hub Mini IR
-            command = _tv_ir_command(intent)
-            await switchbot.send_ir_command(device_id, command)
-            return {"success": True, "device": "tv"}
+        if switchbot.is_diy_device(device_id):
+            await _handle_diy_device(intent, switchbot, device_id)
+        elif intent.device_category == "tv":
+            await _handle_regular_tv(intent, switchbot, device_id)
+        elif switchbot.is_ir_device(device_id):
+            await _handle_regular_ir(intent, switchbot, device_id)
         else:
-            # Regular SwitchBot devices (light, aircon, curtain)
-            command = _switchbot_command(intent)
-            await switchbot.send_command(
-                device_id, command["command"], command.get("parameter", "default")
-            )
-            return {"success": True, "device": intent.device_category}
+            await _handle_physical_device(intent, switchbot, device_id)
+
+        return {"success": True, "device": intent.device_category}
 
     except Exception as e:
         logger.exception("デバイス操作失敗")
         return {"success": False, "device": intent.device_category, "error": str(e)}
 
 
-def _tv_ir_command(intent: IntentResult) -> str:
-    """TV IR action to SwitchBot IR command mapping"""
+# ── 通常TV（remoteType: "TV"）──────────────────────
+# SwitchBot API 標準コマンド: commandType "command"
+_REGULAR_TV_ACTIONS = {
+    "power_on": "turnOn",
+    "power_off": "turnOff",
+    "volume_up": "volumeAdd",
+    "volume_down": "volumeSub",
+    "channel_up": "channelAdd",
+    "channel_down": "channelSub",
+    "mute": "setMute",
+}
+
+
+async def _handle_regular_tv(
+    intent: IntentResult, switchbot: SwitchBotClient, device_id: str
+) -> None:
+    """通常TV: 全コマンドを commandType "command" で送信"""
     action = intent.action or ""
-    action_map = {
-        "power_on": "turnOn",
-        "power_off": "turnOff",
-        "volume_up": "volumeAdd",
-        "volume_down": "volumeSub",
-        "channel_up": "channelAdd",
-        "channel_down": "channelSub",
-        "mute": "mute",
-    }
-    return action_map.get(action, action)
+    command = _REGULAR_TV_ACTIONS.get(action, action)
+    parameter = "default"
+    if action == "set_channel":
+        parameter = str(intent.params.get("channel", ""))
+        command = "SetChannel"
+    await switchbot.send_command(device_id, command, parameter)
 
 
-def _switchbot_command(intent: IntentResult) -> dict:
-    action = intent.action
+# ── DIY IR 共通処理 ──────────────────────────────
+# SwitchBot API仕様: DIYデバイスの標準コマンドは turnOn/turnOff のみ
+# それ以外はアプリ登録ボタン名を commandType "customize" で送信
+_DIY_POWER_ON = {"on", "open", "power_on"}
+_DIY_POWER_OFF = {"off", "close", "power_off"}
+
+
+async def _handle_diy_device(
+    intent: IntentResult, switchbot: SwitchBotClient, device_id: str
+) -> None:
+    """DIY IR機器: turnOn/turnOff は標準コマンド、他はボタン名で customize"""
+    action = intent.action or ""
+
+    if action in _DIY_POWER_ON:
+        await switchbot.send_command(device_id, "turnOn")
+    elif action in _DIY_POWER_OFF:
+        await switchbot.send_command(device_id, "turnOff")
+    else:
+        button_name = intent.params.get("button_name", "")
+        if not button_name:
+            raise ValueError(
+                f"DIYデバイスのアクション '{action}' にはbutton_nameパラメータが必要です。"
+                "SwitchBotアプリに登録されたボタン名を指定してください。"
+            )
+        await switchbot.send_ir_command(device_id, button_name)
+
+
+# ── 通常IR（TV以外、remoteType: "Light", "Air Conditioner" 等）──
+# IR ライト: brightnessUp/brightnessDown のみ（絶対値指定不可）
+_IR_LIGHT_ACTIONS = {
+    "on": "turnOn",
+    "off": "turnOff",
+    "brightness_up": "brightnessUp",
+    "brightness_down": "brightnessDown",
+}
+
+# IR エアコン: setAll で温度・モード一括設定
+_IR_AIRCON_ACTIONS = {"on": "turnOn", "off": "turnOff"}
+
+
+async def _handle_regular_ir(
+    intent: IntentResult, switchbot: SwitchBotClient, device_id: str
+) -> None:
+    """通常IR機器（TV以外）: 標準コマンドを commandType "command" で送信"""
+    action = intent.action or ""
     category = intent.device_category
 
     if category == "light":
-        if action == "on":
-            return {"command": "turnOn"}
-        elif action == "off":
-            return {"command": "turnOff"}
-        elif action == "brightness":
-            return {"command": "setBrightness", "parameter": str(intent.params.get("brightness", 50))}
+        command = _IR_LIGHT_ACTIONS.get(action, action)
+        await switchbot.send_command(device_id, command)
 
     elif category == "aircon":
-        if action == "on":
-            return {"command": "turnOn"}
-        elif action == "off":
-            return {"command": "turnOff"}
+        cmd = _IR_AIRCON_ACTIONS.get(action)
+        if cmd:
+            await switchbot.send_command(device_id, cmd)
         elif action == "set":
             temp = intent.params.get("temperature", 25)
             mode_map = {"cool": "2", "heat": "5", "auto": "1"}
             mode = mode_map.get(intent.params.get("mode", "auto"), "1")
-            return {"command": "setAll", "parameter": f"{temp},{mode},1,on"}
+            await switchbot.send_command(device_id, "setAll", f"{temp},{mode},1,on")
+        else:
+            await switchbot.send_command(device_id, action)
+    else:
+        await switchbot.send_command(device_id, action)
+
+
+# ── 物理SwitchBotデバイス（Curtain, Color Bulb 等）──
+async def _handle_physical_device(
+    intent: IntentResult, switchbot: SwitchBotClient, device_id: str
+) -> None:
+    """物理SwitchBotデバイス: カテゴリ別のコマンドを送信"""
+    action = intent.action or ""
+    category = intent.device_category
+
+    if category == "light":
+        if action == "on":
+            await switchbot.send_command(device_id, "turnOn")
+        elif action == "off":
+            await switchbot.send_command(device_id, "turnOff")
+        elif action == "brightness":
+            brightness = str(intent.params.get("brightness", 50))
+            await switchbot.send_command(device_id, "setBrightness", brightness)
+        else:
+            await switchbot.send_command(device_id, action)
 
     elif category == "curtain":
         if action == "open":
-            return {"command": "turnOn"}
+            await switchbot.send_command(device_id, "turnOn")
         elif action == "close":
-            return {"command": "turnOff"}
-
-    return {"command": action or ""}
+            await switchbot.send_command(device_id, "turnOff")
+        else:
+            await switchbot.send_command(device_id, action)
+    else:
+        await switchbot.send_command(device_id, action)
 
 
 async def _build_response(

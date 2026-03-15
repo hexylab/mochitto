@@ -20,15 +20,28 @@ async def test_get_devices(switchbot_client: SwitchBotClient, httpx_mock):
                 ],
                 "infraredRemoteList": [
                     {"deviceId": "IR001", "deviceName": "テレビ", "remoteType": "TV"},
+                    {"deviceId": "IR002", "deviceName": "DIYテレビ", "remoteType": "DIY TV"},
                 ],
             },
         },
     )
 
     devices = await switchbot_client.get_devices()
-    assert len(devices) == 2
+    assert len(devices) == 3
     assert devices[0]["deviceId"] == "D001"
     assert devices[1]["deviceId"] == "IR001"
+    assert devices[2]["deviceId"] == "IR002"
+
+    # デバイスメタデータが保存されること
+    assert switchbot_client.get_remote_type("D001") == "Color Bulb"
+    assert switchbot_client.get_remote_type("IR001") == "TV"
+    assert switchbot_client.get_remote_type("IR002") == "DIY TV"
+    assert switchbot_client.get_remote_type("unknown") == ""
+
+    # DIYデバイス判定
+    assert not switchbot_client.is_diy_device("D001")
+    assert not switchbot_client.is_diy_device("IR001")
+    assert switchbot_client.is_diy_device("IR002")
 
 
 async def test_send_command(switchbot_client: SwitchBotClient, httpx_mock):

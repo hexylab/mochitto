@@ -31,6 +31,10 @@ def mock_services():
 
     switchbot = AsyncMock()
     switchbot.send_command.return_value = {"statusCode": 100, "message": "success"}
+    switchbot.send_ir_command.return_value = {"statusCode": 100, "message": "success"}
+    switchbot.is_diy_device = MagicMock(return_value=False)
+    switchbot.is_ir_device = MagicMock(return_value=False)
+    switchbot.get_remote_type = MagicMock(return_value="")
 
     return {"stt": stt, "tts": tts, "llm": llm, "switchbot": switchbot}
 
@@ -99,3 +103,104 @@ def test_voice_endpoint_device_failure(test_client, mock_services, sample_audio_
     )
     assert response.status_code == 200
     assert "照明の操作に失敗したのだ" in response.text
+
+
+def test_voice_endpoint_regular_tv(test_client, mock_services, sample_audio_bytes):
+    """通常TV（remoteType: TV）は標準コマンドで操作"""
+    mock_services["llm"].classify_intent.return_value = IntentResult(
+        intent="device_control",
+        device_type="switchbot",
+        device_category="tv",
+        action="volume_up",
+        params={},
+        response="音量を上げたのだ",
+        device_id="IR001",
+    )
+    mock_services["switchbot"].is_diy_device.return_value = False
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    mock_services["switchbot"].send_command.assert_called_with("IR001", "volumeAdd", "default")
+
+
+def test_voice_endpoint_diy_tv_power(test_client, mock_services, sample_audio_bytes):
+    """DIY TV（remoteType: DIY TV）の電源は標準コマンドで操作"""
+    mock_services["llm"].classify_intent.return_value = IntentResult(
+        intent="device_control",
+        device_type="switchbot",
+        device_category="tv",
+        action="power_on",
+        params={},
+        response="テレビをつけたのだ",
+        device_id="IR002",
+    )
+    mock_services["switchbot"].is_diy_device.return_value = True
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    mock_services["switchbot"].send_command.assert_called_with("IR002", "turnOn")
+
+
+def test_voice_endpoint_diy_tv_custom_button(test_client, mock_services, sample_audio_bytes):
+    """DIY TVのカスタムボタンはbutton_nameでcustomize送信"""
+    mock_services["llm"].classify_intent.return_value = IntentResult(
+        intent="device_control",
+        device_type="switchbot",
+        device_category="tv",
+        action="volume_up",
+        params={"button_name": "9"},
+        response="音量を上げたのだ",
+        device_id="IR002",
+    )
+    mock_services["switchbot"].is_diy_device.return_value = True
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    mock_services["switchbot"].send_ir_command.assert_called_with("IR002", "9")
+
+
+def test_voice_endpoint_diy_light(test_client, mock_services, sample_audio_bytes):
+    """DIY Lightの電源は標準コマンドで操作"""
+    mock_services["llm"].classify_intent.return_value = IntentResult(
+        intent="device_control",
+        device_type="switchbot",
+        device_category="light",
+        action="on",
+        params={},
+        response="電気をつけたのだ",
+        device_id="IR003",
+    )
+    mock_services["switchbot"].is_diy_device.return_value = True
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    mock_services["switchbot"].send_command.assert_called_with("IR003", "turnOn")
+
+
+def test_voice_endpoint_ir_light_brightness(test_client, mock_services, sample_audio_bytes):
+    """通常IR Lightの明るさ調整はbrightnessUp/Downで操作"""
+    mock_services["llm"].classify_intent.return_value = IntentResult(
+        intent="device_control",
+        device_type="switchbot",
+        device_category="light",
+        action="brightness_up",
+        params={},
+        response="明るくしたのだ",
+        device_id="IR004",
+    )
+    mock_services["switchbot"].is_diy_device.return_value = False
+    mock_services["switchbot"].is_ir_device.return_value = True
+    response = test_client.post(
+        "/api/v1/voice",
+        files={"audio": ("test.wav", io.BytesIO(sample_audio_bytes), "audio/wav")},
+    )
+    assert response.status_code == 200
+    mock_services["switchbot"].send_command.assert_called_with("IR004", "brightnessUp")
