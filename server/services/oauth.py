@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 AUTH_ENDPOINT = "https://auth.openai.com/oauth/authorize"
 TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+REDIRECT_URI = "http://localhost:1455/auth/callback"
+SCOPE = "openid profile email offline_access"
 REFRESH_MARGIN_SECONDS = 300
 
 
@@ -26,6 +28,10 @@ class OAuthManager:
         self._expires_at: float = 0
         self._lock = asyncio.Lock()
         self._load_token()
+
+    @staticmethod
+    def get_redirect_uri() -> str:
+        return REDIRECT_URI
 
     @property
     def is_authenticated(self) -> bool:
@@ -93,13 +99,17 @@ class OAuthManager:
 
     def get_authorize_url(self, redirect_uri: str, code_verifier: str) -> str:
         code_challenge = self._generate_code_challenge(code_verifier)
+        state = secrets.token_urlsafe(32)
+        self._oauth_state = state
         params = {
             "client_id": CLIENT_ID,
             "response_type": "code",
             "redirect_uri": redirect_uri,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            "scope": "user:inference",
+            "scope": SCOPE,
+            "state": state,
+            "codex_cli_simplified_flow": "true",
         }
         return f"{AUTH_ENDPOINT}?{urlencode(params)}"
 

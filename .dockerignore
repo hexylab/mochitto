@@ -1,0 +1,12 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+client/
+tests/
+docs/
+logs/
+*.ppn
+.env
+auth.json
+.ruff_cache/

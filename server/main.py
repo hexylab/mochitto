@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import socket
 import webbrowser
 from contextlib import asynccontextmanager
 
@@ -45,21 +44,24 @@ async def lifespan(app: FastAPI):
 
 async def _run_oauth_flow(oauth: OAuthManager) -> None:
     code_verifier = oauth._generate_code_verifier()
-    port = _find_free_port()
-    redirect_uri = f"http://localhost:{port}/callback"
+    redirect_uri = OAuthManager.get_redirect_uri()
     auth_url = oauth.get_authorize_url(redirect_uri, code_verifier)
 
     received_code: asyncio.Future[str] = asyncio.get_event_loop().create_future()
 
     async def callback(request: Request):
+        logger.info("コールバック受信: %s", dict(request.query_params))
         code = request.query_params.get("code")
         if code:
             received_code.set_result(code)
             return HTMLResponse("<h1>認証成功！このウィンドウを閉じてください。</h1>")
-        return HTMLResponse("エラー", status_code=400)
+        error = request.query_params.get("error", "不明なエラー")
+        error_desc = request.query_params.get("error_description", "")
+        logger.error("OAuth エラー: %s - %s", error, error_desc)
+        return HTMLResponse(f"<h1>認証エラー</h1><p>{error}: {error_desc}</p>", status_code=400)
 
-    callback_app = Starlette(routes=[Route("/callback", callback)])
-    config = uvicorn.Config(callback_app, host="localhost", port=port, log_level="warning")
+    callback_app = Starlette(routes=[Route("/auth/callback", callback)])
+    config = uvicorn.Config(callback_app, host="localhost", port=1455, log_level="warning")
     server = uvicorn.Server(config)
 
     serve_task = asyncio.create_task(server.serve())
@@ -71,12 +73,6 @@ async def _run_oauth_flow(oauth: OAuthManager) -> None:
     await oauth.exchange_code(code, redirect_uri, code_verifier)
     server.should_exit = True
     await serve_task
-
-
-def _find_free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
 
 
 def create_app_with_services(

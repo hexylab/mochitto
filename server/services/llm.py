@@ -9,13 +9,13 @@ from server.services.oauth import OAuthManager
 
 logger = logging.getLogger(__name__)
 
-RESPONSES_API_URL = "https://api.openai.com/v1/responses"
+RESPONSES_API_URL = "https://chatgpt.com/backend-api/codex/responses"
 MODEL = "gpt-5.4"
 
 SYSTEM_PROMPT_TEMPLATE = """\
 あなたはスマートホームアシスタント「モチット」です。ずんだもんの口調（語尾に「のだ」「なのだ」）で応答してください。
 
-ユーザーの発話を以下のintentに分類し、JSON形式で出力してください。
+ユーザーの発話を以下のintentに分類し、JSON形式（json）で出力してください。
 
 ## Intent一覧
 - device_control: デバイス操作（照明、エアコン、カーテン、テレビ）
@@ -107,28 +107,50 @@ class LLMService:
 
         body: dict = {
             "model": MODEL,
+            "store": False,
+            "stream": True,
+            "instructions": system_prompt,
             "input": [
-                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input},
             ],
         }
 
         if tools:
             body["tools"] = tools
-        if use_structured:
-            body["text"] = {"format": {"type": "json_object"}}
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
+            async with client.stream(
+                "POST",
                 RESPONSES_API_URL,
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
                 json=body,
-            )
-            await resp.raise_for_status()
-            return await resp.json()
+            ) as resp:
+                if resp.status_code != 200:
+                    error_body = await resp.aread()
+                    logger.error("LLM API エラー %d: %s", resp.status_code, error_body.decode())
+                    resp.raise_for_status()
+
+                # SSE ストリームからレスポンスを組み立てる
+                full_response = None
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        event = json.loads(payload)
+                        if event.get("type") == "response.completed":
+                            full_response = event.get("response", {})
+                    except json.JSONDecodeError:
+                        continue
+
+                if full_response is None:
+                    raise RuntimeError("LLM API からレスポンスを取得できませんでした")
+                return full_response
 
     def _extract_text(self, response_data: dict) -> str:
         for output in response_data.get("output", []):
